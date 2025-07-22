@@ -11,7 +11,8 @@
 , libglvnd
 , makeWrapper
 , seatd
-, libdrm
+, egl-wayland  # 添加 EGL Wayland 支持
+, vulkan-loader # 可选：Vulkan 支持
 }:
 
 let
@@ -23,8 +24,8 @@ let
     wayland
     mesa
     libglvnd
-    seatd
-    libdrm
+    egl-wayland  # 添加 EGL 支持
+    vulkan-loader
   ];
 in
 
@@ -51,7 +52,8 @@ rustPlatform.buildRustPackage rec {
     mesa
     libglvnd
     seatd
-    libdrm
+    egl-wayland  # 添加 EGL 支持
+    vulkan-loader
   ];
   
   # 设置运行时环境
@@ -71,10 +73,8 @@ rustPlatform.buildRustPackage rec {
     mkdir -p "\$XDG_RUNTIME_DIR"
     chmod 0700 "\$XDG_RUNTIME_DIR"
     
-    # 停止现有显示管理器
-    if [ -z "\$NO_STOP_DISPLAY_MANAGER" ]; then
-      sudo systemctl stop display-manager.service 2>/dev/null || true
-    fi
+    # 设置 EGL 平台
+    export EGL_PLATFORM=wayland
     
     # 运行合成器
     exec $out/bin/smallanvil-compositor "\$@"
