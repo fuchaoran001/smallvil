@@ -55,11 +55,11 @@
           ];
 
           # 指定构建 anvil 示例
-          cargoBuildFlags = [ "--example" "smallanvil" ];
+          cargoBuildFlags = [ "--example" "smallvil" ];
 
           # 安装生成的二进制文件
           postInstall = ''
-            mv $out/bin/smallanvil $out/bin/smallanvil-compositor
+            mv $out/bin/smallanvil $out/bin/smallvil-compositor
           '';
           
           # 确保 libEGL 被正确链接
