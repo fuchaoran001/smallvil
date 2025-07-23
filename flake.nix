@@ -15,7 +15,6 @@
           overlays = [ rust-overlay.overlays.default ];
           config = {
             allowUnfree = true;
-            # 国内镜像源配置
             substituters = [
               "https://mirror.sjtu.edu.cn/nix-channels/store"
               "https://mirrors.tuna.tsinghua.edu.cn/nix-channels/store"
@@ -55,6 +54,8 @@
           nativeBuildInputs = [
             pkgs.pkg-config
             pkgs.makeWrapper
+            pkgs.git  # 关键修复：添加 Git
+            pkgs.cacert  # SSL 证书
           ];
           
           buildInputs = [
@@ -67,10 +68,13 @@
             mkdir -p .cargo
             cat > .cargo/config.toml <<EOF
             [source.crates-io]
-            replace-with = 'ustc'
+            replace-with = 'rsproxy'
             
-            [source.ustc]
-            registry = "https://mirrors.ustc.edu.cn/crates.io-index"
+            [source.rsproxy]
+            registry = "https://rsproxy.cn/crates.io-index"
+            
+            [registries.rsproxy]
+            index = "https://rsproxy.cn/crates.io-index"
             
             [net]
             git-fetch-with-cli = true
@@ -80,8 +84,8 @@
           buildPhase = ''
             # 设置国内镜像环境变量
             export CARGO_HOME=$(pwd)/.cargo
-            export RUSTUP_DIST_SERVER="https://rsproxy.cn"
-            export RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
+            export GIT_SSL_CAINFO="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+            export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
             
             cargo build --release
           '';
@@ -108,6 +112,7 @@
             pkgs.pkg-config
             pkgs.clippy
             pkgs.makeWrapper
+            pkgs.git  # 确保开发环境也有 Git
           ];
 
           buildInputs = commonLibPath pkgs;
@@ -121,10 +126,13 @@
             mkdir -p .cargo
             cat > .cargo/config.toml <<EOF
             [source.crates-io]
-            replace-with = 'ustc'
+            replace-with = 'rsproxy'
             
-            [source.ustc]
-            registry = "https://mirrors.ustc.edu.cn/crates.io-index"
+            [source.rsproxy]
+            registry = "https://rsproxy.cn/crates.io-index"
+            
+            [registries.rsproxy]
+            index = "https://rsproxy.cn/crates.io-index"
             
             [net]
             git-fetch-with-cli = true
@@ -137,7 +145,7 @@
               sudo chown $(id -u):$(id -g) "$XDG_RUNTIME_DIR"
               sudo chmod 0700 "$XDG_RUNTIME_DIR"
             )
-            echo "Smithay开发环境已激活 (使用国内镜像源)"
+            echo "Smithay开发环境已激活 (使用rsproxy镜像源)"
           '';
         };
       });
