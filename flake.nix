@@ -2,7 +2,7 @@
   description = "Smithay compositor with Anvil example";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
@@ -15,6 +15,7 @@
           overlays = [ rust-overlay.overlays.default ];
           config = {
             allowUnfree = true;
+            # 国内镜像源配置
             substituters = [
               "https://mirror.sjtu.edu.cn/nix-channels/store"
               "https://mirrors.tuna.tsinghua.edu.cn/nix-channels/store"
@@ -51,14 +52,37 @@
           version = "0.1.0";
           src = ./.;
           
-          buildInputs = [
-            pkgs.rustc
-            pkgs.cargo
+          nativeBuildInputs = [
             pkgs.pkg-config
             pkgs.makeWrapper
+          ];
+          
+          buildInputs = [
+            pkgs.cargo
+            pkgs.rustc
           ] ++ (commonLibPath pkgs);
           
+          # 配置 Rust 国内镜像源
+          configurePhase = ''
+            mkdir -p .cargo
+            cat > .cargo/config.toml <<EOF
+            [source.crates-io]
+            replace-with = 'ustc'
+            
+            [source.ustc]
+            registry = "https://mirrors.ustc.edu.cn/crates.io-index"
+            
+            [net]
+            git-fetch-with-cli = true
+            EOF
+          '';
+          
           buildPhase = ''
+            # 设置国内镜像环境变量
+            export CARGO_HOME=$(pwd)/.cargo
+            export RUSTUP_DIST_SERVER="https://rsproxy.cn"
+            export RUSTUP_UPDATE_ROOT="https://rsproxy.cn/rustup"
+            
             cargo build --release
           '';
           
@@ -88,20 +112,32 @@
 
           buildInputs = commonLibPath pkgs;
           
+          # 设置国内 Rust 工具链镜像
           RUSTUP_DIST_SERVER = "https://rsproxy.cn";
           RUSTUP_UPDATE_ROOT = "https://rsproxy.cn/rustup";
           
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (commonLibPath pkgs);
-          
+          # 配置 Cargo 使用国内镜像
           shellHook = ''
-            echo "Smithay开发环境已激活"
+            mkdir -p .cargo
+            cat > .cargo/config.toml <<EOF
+            [source.crates-io]
+            replace-with = 'ustc'
+            
+            [source.ustc]
+            registry = "https://mirrors.ustc.edu.cn/crates.io-index"
+            
+            [net]
+            git-fetch-with-cli = true
+            EOF
+            
+            export CARGO_HOME=$(pwd)/.cargo
             export XDG_RUNTIME_DIR="/run/user/$(id -u)"
             [ ! -d "$XDG_RUNTIME_DIR" ] && ( 
               sudo mkdir -p "$XDG_RUNTIME_DIR"
               sudo chown $(id -u):$(id -g) "$XDG_RUNTIME_DIR"
               sudo chmod 0700 "$XDG_RUNTIME_DIR"
             )
-            export WAYLAND_DISPLAY="wayland-1"
+            echo "Smithay开发环境已激活 (使用国内镜像源)"
           '';
         };
       });
