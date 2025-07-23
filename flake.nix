@@ -30,7 +30,7 @@
     in {
       packages = forEachSystem ({ pkgs }: {
         default = pkgs.rustPlatform.buildRustPackage {
-          pname = "smallanvil";
+          pname = "smallvil";  # 使用项目名称
           version = "0.1.0";
           src = ./.;
 
@@ -48,23 +48,24 @@
             pkgs.wayland
             pkgs.udev
             pkgs.xwayland
-            
-            # 添加 EGL 和 OpenGL 支持
             pkgs.libglvnd
             pkgs.mesa
           ];
 
-          # 指定构建 anvil 示例
-          cargoBuildFlags = [ "--example" "smallanvil" ];
+          # 直接构建项目而不是示例
+          buildPhase = ''
+            cargo build --release
+          '';
 
-       # 修复：使用正确的二进制名称
-      postInstall = ''
-        mv $out/bin/smallanvil $out/bin/smallvil-compositor
-      '';
-      
-      preFixup = ''
-        patchelf --add-needed libEGL.so.1 $out/bin/smallanvil-compositor
-      '';
+          # 安装主二进制文件
+          installPhase = ''
+            install -Dm755 target/release/smallvil $out/bin/smallvil-compositor
+          '';
+
+          # 确保EGL库被链接
+          preFixup = ''
+            patchelf --add-needed libEGL.so.1 $out/bin/smallvil-compositor
+          '';
         };
       });
 
