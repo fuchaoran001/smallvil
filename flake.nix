@@ -15,7 +15,6 @@
           overlays = [ rust-overlay.overlays.default ];
           config = {
             allowUnfree = true;
-            # 添加国内镜像源
             substituters = [
               "https://mirror.sjtu.edu.cn/nix-channels/store"
               "https://mirrors.tuna.tsinghua.edu.cn/nix-channels/store"
@@ -27,69 +26,51 @@
           };
         };
       });
+      
+      # 共享的库路径定义
+      commonLibPath = pkgs: with pkgs; [
+        libglvnd
+        mesa
+        libdrm
+        xorg.libX11
+        xorg.libXcursor
+        xorg.libXrandr
+        xorg.libXi
+        xorg.libXext
+        wayland
+        libxkbcommon
+        libgbm
+        libinput
+        seatd
+      ];
+      
     in {
       packages = forEachSystem ({ pkgs }: {
-        default = pkgs.rustPlatform.buildRustPackage {
+        default = pkgs.stdenv.mkDerivation {
           pname = "smallvil";
           version = "0.1.0";
           src = ./.;
-
-          cargoLock = {
-            lockFile = ./Cargo.lock;
-          };
-
-          nativeBuildInputs = [ 
-            pkgs.pkg-config 
-            pkgs.makeWrapper  # 用于创建包装脚本
-          ];
-
+          
           buildInputs = [
-            pkgs.libxkbcommon
-            pkgs.libinput
-            pkgs.libgbm
-            pkgs.seatd
-            pkgs.wayland
-            pkgs.udev
-            pkgs.xwayland
-            pkgs.libglvnd
-            pkgs.mesa
-            
-            # 添加更多必要的图形库
-            pkgs.libdrm
-            pkgs.xorg.libX11
-            pkgs.xorg.libXcursor
-            pkgs.xorg.libXrandr
-            pkgs.xorg.libXi
-            pkgs.xorg.libXext
-          ];
-
-          # 直接构建项目
+            pkgs.rustc
+            pkgs.cargo
+            pkgs.pkg-config
+            pkgs.makeWrapper
+          ] ++ (commonLibPath pkgs);
+          
           buildPhase = ''
             cargo build --release
           '';
-
-          # 安装主二进制文件并创建包装脚本
+          
           installPhase = ''
-            # 安装原始二进制文件
+            mkdir -p $out/bin
             install -Dm755 target/release/smallvil $out/bin/smallvil.raw
             
-            # 创建包装脚本自动设置环境
+            # 创建自动环境设置的包装器
             makeWrapper $out/bin/smallvil.raw $out/bin/smallvil \
-              --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [
-                pkgs.libglvnd
-                pkgs.mesa
-                pkgs.libdrm
-                pkgs.xorg.libX11
-                pkgs.xorg.libXcursor
-                pkgs.xorg.libXrandr
-                pkgs.xorg.libXi
-                pkgs.xorg.libXext
-                pkgs.wayland
-                pkgs.libxkbcommon
-                pkgs.libgbm
-              ]}" \
+              --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath (commonLibPath pkgs)}" \
               --prefix PATH : "${pkgs.lib.makeBinPath [pkgs.xwayland]}" \
-              --set XDG_RUNTIME_DIR "/run/user/$(id -u)"
+              --run 'export XDG_RUNTIME_DIR="/run/user/$(id -u)"'
           '';
         };
       });
@@ -103,81 +84,24 @@
             pkgs.pkg-config
             pkgs.clippy
             pkgs.makeWrapper
-            
-            # 添加 mesa 工具用于调试
-            pkgs.mesa-demos
           ];
 
-          buildInputs = [
-            pkgs.libxkbcommon
-            pkgs.libinput
-            pkgs.libgbm
-            pkgs.seatd
-            pkgs.wayland
-            pkgs.udev
-            
-            # 添加 EGL 和 OpenGL 支持
-            pkgs.libglvnd
-            pkgs.mesa
-            pkgs.libdrm
-            pkgs.xorg.libX11
-            pkgs.xorg.libXcursor
-            pkgs.xorg.libXrandr
-            pkgs.xorg.libXi
-            pkgs.xorg.libXext
-          ];
-
-          # 设置国内 Rust 工具链镜像
+          buildInputs = commonLibPath pkgs;
+          
           RUSTUP_DIST_SERVER = "https://rsproxy.cn";
           RUSTUP_UPDATE_ROOT = "https://rsproxy.cn/rustup";
           
-          # 关键修复：确保所有运行时库可用
-          LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath [
-            pkgs.libxkbcommon
-            pkgs.libinput
-            pkgs.libgbm
-            pkgs.seatd
-            pkgs.wayland
-            pkgs.udev
-            pkgs.libglvnd
-            pkgs.mesa
-            pkgs.libdrm
-            pkgs.xorg.libX11
-            pkgs.xorg.libXcursor
-            pkgs.xorg.libXrandr
-            pkgs.xorg.libXi
-            pkgs.xorg.libXext
-          ]}";
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath (commonLibPath pkgs);
           
           shellHook = ''
-            echo "Smithay开发环境已激活 (使用国内镜像源)"
-            
-            # 创建安全的用户运行时目录
+            echo "Smithay开发环境已激活"
             export XDG_RUNTIME_DIR="/run/user/$(id -u)"
-            if [ ! -d "$XDG_RUNTIME_DIR" ]; then
-              echo "创建运行时目录: $XDG_RUNTIME_DIR"
+            [ ! -d "$XDG_RUNTIME_DIR" ] && ( 
               sudo mkdir -p "$XDG_RUNTIME_DIR"
               sudo chown $(id -u):$(id -g) "$XDG_RUNTIME_DIR"
               sudo chmod 0700 "$XDG_RUNTIME_DIR"
-            fi
-            
-            # 设置 Wayland 显示名称
+            )
             export WAYLAND_DISPLAY="wayland-1"
-            
-            # 检查 EGL 支持
-            echo "检查 EGL 支持:"
-            if ${pkgs.mesa-demos}/bin/eglinfo; then
-              echo "EGL 支持正常"
-            else
-              echo "警告: EGL 支持可能有问题"
-              echo "尝试设置 LIBGL_DEBUG=verbose 获取更多信息"
-            fi
-            
-            # 显示调试信息
-            echo "环境变量:"
-            echo "  WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
-            echo "  XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
-            echo "  LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
           '';
         };
       });
