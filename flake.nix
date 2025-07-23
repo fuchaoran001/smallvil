@@ -56,8 +56,6 @@
             pkgs.makeWrapper
             pkgs.git
             pkgs.cacert
-            pkgs.curl
-            pkgs.dnsutils  # 添加 dig 用于 DNS 诊断
           ];
           
           buildInputs = [
@@ -65,7 +63,7 @@
             pkgs.rustc
           ] ++ (commonLibPath pkgs);
           
-          # 配置 Rust 国内镜像源 - 使用更可靠的清华镜像
+          # 配置 Rust 国内镜像源 - 使用清华镜像
           configurePhase = ''
             mkdir -p .cargo
             cat > .cargo/config.toml <<EOF
@@ -87,11 +85,6 @@
             export GIT_SSL_CAINFO="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
             export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
             
-            # 诊断 DNS 问题
-            echo "DNS 诊断:"
-            dig mirrors.tuna.tsinghua.edu.cn +short
-            curl -I https://mirrors.tuna.tsinghua.edu.cn
-            
             # 使用清华镜像构建
             cargo build --release
           '';
@@ -104,7 +97,8 @@
             makeWrapper $out/bin/smallvil.raw $out/bin/smallvil \
               --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath (commonLibPath pkgs)}" \
               --prefix PATH : "${pkgs.lib.makeBinPath [pkgs.xwayland]}" \
-              --run 'export XDG_RUNTIME_DIR="/run/user/$(id -u)"'
+              --run 'export XDG_RUNTIME_DIR="/run/user/$(id -u)"' \
+              --run 'if [ ! -d "$XDG_RUNTIME_DIR" ]; then mkdir -p "$XDG_RUNTIME_DIR"; chmod 0700 "$XDG_RUNTIME_DIR"; fi'
           '';
         };
       });
@@ -141,9 +135,8 @@
             export CARGO_HOME=$(pwd)/.cargo
             export XDG_RUNTIME_DIR="/run/user/$(id -u)"
             [ ! -d "$XDG_RUNTIME_DIR" ] && ( 
-              sudo mkdir -p "$XDG_RUNTIME_DIR"
-              sudo chown $(id -u):$(id -g) "$XDG_RUNTIME_DIR"
-              sudo chmod 0700 "$XDG_RUNTIME_DIR"
+              mkdir -p "$XDG_RUNTIME_DIR"
+              chmod 0700 "$XDG_RUNTIME_DIR"
             )
             echo "Smithay开发环境已激活 (使用清华镜像源)"
           '';
