@@ -50,49 +50,98 @@
             pkgs.xwayland
             pkgs.libglvnd
             pkgs.mesa
-            pkgs.libdrm
-            pkgs.xorg.libX11
-            pkgs.xorg.libXcursor
-            pkgs.xorg.libXrandr
-            pkgs.xorg.libXi
           ];
 
+          # 直接构建项目而不是示例
           buildPhase = ''
             cargo build --release
           '';
 
+          # 安装主二进制文件并命名为 smallvil
           installPhase = ''
-            mkdir -p $out/bin
-            cp target/release/smallvil $out/bin/smallvil-compositor.raw
-            
-            # 创建包装脚本自动设置环境
-            cat > $out/bin/smallvil-compositor <<EOF
-            #!${pkgs.bash}/bin/bash
-            # 设置必要的库路径
-            export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath [
-              pkgs.libglvnd
-              pkgs.mesa
-              pkgs.libdrm
-              pkgs.xorg.libX11
-              pkgs.xorg.libXcursor
-              pkgs.xorg.libXrandr
-              pkgs.xorg.libXi
-              pkgs.wayland
-            ]}:\$LD_LIBRARY_PATH
-            
-            # 设置 Wayland 环境
-            export XDG_RUNTIME_DIR=/run/user/$(id -u)
-            [ ! -d "\$XDG_RUNTIME_DIR" ] && mkdir -p "\$XDG_RUNTIME_DIR" && chmod 0700 "\$XDG_RUNTIME_DIR"
-            
-            # 运行实际的 compositor
-            exec $out/bin/smallvil-compositor.raw "\$@"
-            EOF
-            
-            chmod +x $out/bin/smallvil-compositor
+            install -Dm755 target/release/smallvil $out/bin/smallvil
+          '';
+
+          # 确保EGL库被链接到新命名的二进制文件
+          preFixup = ''
+            patchelf --add-needed libEGL.so.1 $out/bin/smallvil
           '';
         };
       });
 
-      # ... devShells 部分保持不变 ...
+      devShells = forEachSystem ({ pkgs }: {
+        default = pkgs.mkShell {
+          packages = [
+            (pkgs.rust-bin.stable.latest.default.override {
+              extensions = [ "rust-src" ];
+            })
+            pkgs.pkg-config
+            pkgs.clippy
+            
+            # 添加 mesa 工具用于调试
+            pkgs.mesa-demos
+          ];
+
+          buildInputs = [
+            pkgs.libxkbcommon
+            pkgs.libinput
+            pkgs.libgbm
+            pkgs.seatd
+            pkgs.wayland
+            pkgs.udev
+            
+            # 添加 EGL 和 OpenGL 支持
+            pkgs.libglvnd
+            pkgs.mesa
+          ];
+
+          # 设置国内 Rust 工具链镜像
+          RUSTUP_DIST_SERVER = "https://rsproxy.cn";
+          RUSTUP_UPDATE_ROOT = "https://rsproxy.cn/rustup";
+          
+          # 关键修复：确保所有运行时库可用
+          LD_LIBRARY_PATH = "${pkgs.lib.makeLibraryPath [
+            pkgs.libxkbcommon
+            pkgs.libinput
+            pkgs.libgbm
+            pkgs.seatd
+            pkgs.wayland
+            pkgs.udev
+            pkgs.libglvnd
+            pkgs.mesa
+          ]}";
+          
+          shellHook = ''
+            echo "Smithay开发环境已激活 (使用国内镜像源)"
+            
+            # 创建安全的用户运行时目录
+            export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+            if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+              echo "创建运行时目录: $XDG_RUNTIME_DIR"
+              sudo mkdir -p "$XDG_RUNTIME_DIR"
+              sudo chown $(id -u):$(id -g) "$XDG_RUNTIME_DIR"
+              sudo chmod 0700 "$XDG_RUNTIME_DIR"
+            fi
+            
+            # 设置 Wayland 显示名称
+            export WAYLAND_DISPLAY="wayland-1"
+            
+            # 检查 EGL 支持
+            echo "检查 EGL 支持:"
+            if ${pkgs.mesa-demos}/bin/eglinfo; then
+              echo "EGL 支持正常"
+            else
+              echo "警告: EGL 支持可能有问题"
+              echo "尝试设置 LIBGL_DEBUG=verbose 获取更多信息"
+            fi
+            
+            # 显示调试信息
+            echo "环境变量:"
+            echo "  WAYLAND_DISPLAY=$WAYLAND_DISPLAY"
+            echo "  XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR"
+            echo "  LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
+          '';
+        };
+      });
     };
 }
