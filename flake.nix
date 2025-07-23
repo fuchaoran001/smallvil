@@ -55,17 +55,16 @@
           ];
 
           # 指定构建 anvil 示例
-          cargoBuildFlags = [ "--example" "smallvil" ];
+          cargoBuildFlags = [ "--example" "smallanvil" ];
 
-          # 安装生成的二进制文件
-          postInstall = ''
-            mv $out/bin/smallanvil $out/bin/smallvil-compositor
-          '';
-          
-          # 确保 libEGL 被正确链接
-          preFixup = ''
-            patchelf --add-needed libEGL.so.1 $out/bin/smallanvil-compositor
-          '';
+       # 修复：使用正确的二进制名称
+      postInstall = ''
+        mv $out/bin/smallanvil $out/bin/smallvil-compositor
+      '';
+      
+      preFixup = ''
+        patchelf --add-needed libEGL.so.1 $out/bin/smallanvil-compositor
+      '';
         };
       });
 
