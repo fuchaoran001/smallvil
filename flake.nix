@@ -54,8 +54,10 @@
           nativeBuildInputs = [
             pkgs.pkg-config
             pkgs.makeWrapper
-            pkgs.git  # 关键修复：添加 Git
-            pkgs.cacert  # SSL 证书
+            pkgs.git
+            pkgs.cacert
+            pkgs.curl
+            pkgs.dnsutils  # 添加 dig 用于 DNS 诊断
           ];
           
           buildInputs = [
@@ -63,30 +65,34 @@
             pkgs.rustc
           ] ++ (commonLibPath pkgs);
           
-          # 配置 Rust 国内镜像源
+          # 配置 Rust 国内镜像源 - 使用更可靠的清华镜像
           configurePhase = ''
             mkdir -p .cargo
             cat > .cargo/config.toml <<EOF
             [source.crates-io]
-            replace-with = 'rsproxy'
+            replace-with = 'tuna'
             
-            [source.rsproxy]
-            registry = "https://rsproxy.cn/crates.io-index"
-            
-            [registries.rsproxy]
-            index = "https://rsproxy.cn/crates.io-index"
+            [source.tuna]
+            registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
             
             [net]
+            retry = 5
             git-fetch-with-cli = true
             EOF
           '';
           
           buildPhase = ''
-            # 设置国内镜像环境变量
+            # 设置环境变量
             export CARGO_HOME=$(pwd)/.cargo
             export GIT_SSL_CAINFO="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
             export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
             
+            # 诊断 DNS 问题
+            echo "DNS 诊断:"
+            dig mirrors.tuna.tsinghua.edu.cn +short
+            curl -I https://mirrors.tuna.tsinghua.edu.cn
+            
+            # 使用清华镜像构建
             cargo build --release
           '';
           
@@ -112,27 +118,21 @@
             pkgs.pkg-config
             pkgs.clippy
             pkgs.makeWrapper
-            pkgs.git  # 确保开发环境也有 Git
+            pkgs.git
+            pkgs.cacert
           ];
 
           buildInputs = commonLibPath pkgs;
-          
-          # 设置国内 Rust 工具链镜像 - 修复：添加分号
-          RUSTUP_DIST_SERVER = "https://rsproxy.cn";  # 添加分号
-          RUSTUP_UPDATE_ROOT = "https://rsproxy.cn/rustup";  # 添加分号
           
           # 配置 Cargo 使用国内镜像
           shellHook = ''
             mkdir -p .cargo
             cat > .cargo/config.toml <<EOF
             [source.crates-io]
-            replace-with = 'rsproxy'
+            replace-with = 'tuna'
             
-            [source.rsproxy]
-            registry = "https://rsproxy.cn/crates.io-index"
-            
-            [registries.rsproxy]
-            index = "https://rsproxy.cn/crates.io-index"
+            [source.tuna]
+            registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
             
             [net]
             git-fetch-with-cli = true
@@ -145,7 +145,7 @@
               sudo chown $(id -u):$(id -g) "$XDG_RUNTIME_DIR"
               sudo chmod 0700 "$XDG_RUNTIME_DIR"
             )
-            echo "Smithay开发环境已激活 (使用rsproxy镜像源)"
+            echo "Smithay开发环境已激活 (使用清华镜像源)"
           '';
         };
       });
