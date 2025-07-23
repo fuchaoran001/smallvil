@@ -38,7 +38,10 @@
             lockFile = ./Cargo.lock;
           };
 
-          nativeBuildInputs = [ pkgs.pkg-config ];
+          nativeBuildInputs = [ 
+            pkgs.pkg-config 
+            pkgs.makeWrapper  # 用于创建包装脚本
+          ];
 
           buildInputs = [
             pkgs.libxkbcommon
@@ -50,21 +53,43 @@
             pkgs.xwayland
             pkgs.libglvnd
             pkgs.mesa
+            
+            # 添加更多必要的图形库
+            pkgs.libdrm
+            pkgs.xorg.libX11
+            pkgs.xorg.libXcursor
+            pkgs.xorg.libXrandr
+            pkgs.xorg.libXi
+            pkgs.xorg.libXext
           ];
 
-          # 直接构建项目而不是示例
+          # 直接构建项目
           buildPhase = ''
             cargo build --release
           '';
 
-          # 安装主二进制文件并命名为 smallvil
+          # 安装主二进制文件并创建包装脚本
           installPhase = ''
-            install -Dm755 target/release/smallvil $out/bin/smallvil
-          '';
-
-          # 确保EGL库被链接到新命名的二进制文件
-          preFixup = ''
-            patchelf --add-needed libEGL.so.1 $out/bin/smallvil
+            # 安装原始二进制文件
+            install -Dm755 target/release/smallvil $out/bin/smallvil.raw
+            
+            # 创建包装脚本自动设置环境
+            makeWrapper $out/bin/smallvil.raw $out/bin/smallvil \
+              --prefix LD_LIBRARY_PATH : "${pkgs.lib.makeLibraryPath [
+                pkgs.libglvnd
+                pkgs.mesa
+                pkgs.libdrm
+                pkgs.xorg.libX11
+                pkgs.xorg.libXcursor
+                pkgs.xorg.libXrandr
+                pkgs.xorg.libXi
+                pkgs.xorg.libXext
+                pkgs.wayland
+                pkgs.libxkbcommon
+                pkgs.libgbm
+              ]}" \
+              --prefix PATH : "${pkgs.lib.makeBinPath [pkgs.xwayland]}" \
+              --set XDG_RUNTIME_DIR "/run/user/$(id -u)"
           '';
         };
       });
@@ -77,6 +102,7 @@
             })
             pkgs.pkg-config
             pkgs.clippy
+            pkgs.makeWrapper
             
             # 添加 mesa 工具用于调试
             pkgs.mesa-demos
@@ -93,6 +119,12 @@
             # 添加 EGL 和 OpenGL 支持
             pkgs.libglvnd
             pkgs.mesa
+            pkgs.libdrm
+            pkgs.xorg.libX11
+            pkgs.xorg.libXcursor
+            pkgs.xorg.libXrandr
+            pkgs.xorg.libXi
+            pkgs.xorg.libXext
           ];
 
           # 设置国内 Rust 工具链镜像
@@ -109,6 +141,12 @@
             pkgs.udev
             pkgs.libglvnd
             pkgs.mesa
+            pkgs.libdrm
+            pkgs.xorg.libX11
+            pkgs.xorg.libXcursor
+            pkgs.xorg.libXrandr
+            pkgs.xorg.libXi
+            pkgs.xorg.libXext
           ]}";
           
           shellHook = ''
