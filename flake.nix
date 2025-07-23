@@ -54,9 +54,8 @@
           nativeBuildInputs = [
             pkgs.pkg-config
             pkgs.makeWrapper
-            pkgs.git
-            pkgs.cacert
-            pkgs.curl  # 添加 curl 用于网络诊断
+            pkgs.git  # 关键修复：添加 Git
+            pkgs.cacert  # SSL 证书
           ];
           
           buildInputs = [
@@ -67,26 +66,17 @@
           # 配置 Rust 国内镜像源
           configurePhase = ''
             mkdir -p .cargo
-            
-            # 使用多个镜像源作为备份
             cat > .cargo/config.toml <<EOF
             [source.crates-io]
-            replace-with = 'tuna'
+            replace-with = 'rsproxy'
             
-            # 清华镜像源
-            [source.tuna]
-            registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
+            [source.rsproxy]
+            registry = "https://rsproxy.cn/crates.io-index"
             
-            # 上海交大镜像源
-            [source.sjtu]
-            registry = "sparse+https://mirror.sjtu.edu.cn/crates.io-index/"
-            
-            # 中科大镜像源
-            [source.ustc]
-            registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"
+            [registries.rsproxy]
+            index = "https://rsproxy.cn/crates.io-index"
             
             [net]
-            retry = 5
             git-fetch-with-cli = true
             EOF
           '';
@@ -97,37 +87,7 @@
             export GIT_SSL_CAINFO="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
             export SSL_CERT_FILE="${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
             
-            # 测试网络连接
-            echo "测试镜像源连接性:"
-            for url in "https://mirrors.tuna.tsinghua.edu.cn" \
-                       "https://mirror.sjtu.edu.cn" \
-                       "https://mirrors.ustc.edu.cn"; do
-              if curl -s --head --fail "$url" > /dev/null; then
-                echo "  $url: 可用"
-              else
-                echo "  $url: 不可用"
-              fi
-            done
-            
-            # 尝试使用不同镜像源
-            for source in tuna sjtu ustc; do
-              echo "尝试使用镜像源: $source"
-              sed -i "s/replace-with = .*/replace-with = '$source'/" .cargo/config.toml
-              
-              if cargo build --release; then
-                echo "使用 $source 镜像源构建成功"
-                break
-              else
-                echo "使用 $source 镜像源构建失败"
-              fi
-            done
-            
-            # 如果所有镜像都失败，使用默认源
-            if [ ! -f target/release/smallvil ]; then
-              echo "所有镜像源失败，尝试使用默认源..."
-              sed -i "s/replace-with = .*/replace-with = 'crates-io'/" .cargo/config.toml
-              cargo build --release
-            fi
+            cargo build --release
           '';
           
           installPhase = ''
@@ -152,25 +112,27 @@
             pkgs.pkg-config
             pkgs.clippy
             pkgs.makeWrapper
-            pkgs.git
-            pkgs.cacert
+            pkgs.git  # 确保开发环境也有 Git
           ];
 
           buildInputs = commonLibPath pkgs;
           
-          # 设置国内 Rust 工具链镜像
-          RUSTUP_DIST_SERVER = "https://rsproxy.cn"
-          RUSTUP_UPDATE_ROOT = "https://rsproxy.cn/rustup"
+          # 设置国内 Rust 工具链镜像 - 修复：添加分号
+          RUSTUP_DIST_SERVER = "https://rsproxy.cn";  # 添加分号
+          RUSTUP_UPDATE_ROOT = "https://rsproxy.cn/rustup";  # 添加分号
           
           # 配置 Cargo 使用国内镜像
           shellHook = ''
             mkdir -p .cargo
             cat > .cargo/config.toml <<EOF
             [source.crates-io]
-            replace-with = 'tuna'
+            replace-with = 'rsproxy'
             
-            [source.tuna]
-            registry = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
+            [source.rsproxy]
+            registry = "https://rsproxy.cn/crates.io-index"
+            
+            [registries.rsproxy]
+            index = "https://rsproxy.cn/crates.io-index"
             
             [net]
             git-fetch-with-cli = true
@@ -183,7 +145,7 @@
               sudo chown $(id -u):$(id -g) "$XDG_RUNTIME_DIR"
               sudo chmod 0700 "$XDG_RUNTIME_DIR"
             )
-            echo "Smithay开发环境已激活 (使用清华镜像源)"
+            echo "Smithay开发环境已激活 (使用rsproxy镜像源)"
           '';
         };
       });
